@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: nutrisnap
+    env: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: USDA_API_KEY
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
