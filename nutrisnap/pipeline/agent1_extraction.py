@@ -4,24 +4,21 @@ Agent 1 — Ingredient Extraction
 Input:  image bytes (from photo handler) OR ingredients_text (from barcode path)
 Output: raw_ingredients_json — a list of dicts, one per ingredient
 
-If the barcode path already gave us ingredients_text, we skip the vision call
-and parse the text directly via a lightweight Gemini text call (faster + cheaper).
+Vision model: Llama 4 Scout via Groq (free tier, works in India)
 """
 import json
 import time
-from PIL import Image
-import io
+import base64
 
 from pipeline.state import PipelineState
-from utils.gemini_client import get_vision_model, get_text_model
+from utils.gemini_client import get_client
+from config import GROQ_VISION_MODEL, GROQ_TEXT_MODEL
 from observability.logger import get_logger
 from observability.metrics import metrics
 
 logger = get_logger(__name__)
 
-VISION_PROMPT = """
-You are an ingredient extraction specialist. The user has sent a photo of the
-ingredients section from a packaged food product.
+VISION_PROMPT = """You are an ingredient extraction specialist. The user has sent a photo of the ingredients section from a packaged food product.
 
 Your task:
 1. Read the ingredients list carefully from the image.
@@ -39,26 +36,20 @@ Example output:
   {"name": "Wheat flour", "quantity": "70%", "e_number": null},
   {"name": "Monosodium glutamate", "quantity": null, "e_number": "E621"},
   {"name": "Tartrazine", "quantity": null, "e_number": "E102"}
-]
-"""
+]"""
 
-TEXT_PARSE_PROMPT = """
-You are an ingredient extraction specialist. You have been given raw ingredients text
-from a food product (extracted from a barcode scan).
+TEXT_PARSE_PROMPT = """You are an ingredient extraction specialist. Parse the following raw ingredients text from a food product and return ONLY a JSON array. No explanation, no markdown, no backticks.
 
-Parse it and return ONLY a JSON array. No explanation, no markdown, no backticks.
 Each element must be an object with:
   - "name": ingredient name, cleaned and normalised
   - "quantity": quantity if present (string or null)
   - "e_number": E-number if present, e.g. "E621" (string or null)
 
 Ingredients text:
-{ingredients_text}
-"""
+{ingredients_text}"""
 
 
 def _strip_fences(text: str) -> str:
-    """Strip markdown code fences if the model returns them despite the prompt."""
     text = text.strip()
     if text.startswith("```"):
         parts = text.split("```")
@@ -70,30 +61,47 @@ def _strip_fences(text: str) -> str:
 
 async def run_agent1(state: PipelineState) -> PipelineState:
     start = time.monotonic()
-
-    # Barcode path — parse text instead of running vision
     if state.get("barcode_detected") and state.get("ingredients_text_from_barcode"):
         return await _parse_from_text(state, start)
-
     return await _extract_from_image(state, start)
 
 
 async def _extract_from_image(state: PipelineState, start: float) -> PipelineState:
     trace_id = state.get("trace_id", "")
     try:
-        image = Image.open(io.BytesIO(state["image_bytes"]))
-        model = get_vision_model()
-        response = model.generate_content([VISION_PROMPT, image])
-        raw_text = _strip_fences(response.text)
+        image_bytes = state["image_bytes"]
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        # Detect mime type
+        mime_type = "image/jpeg"
+        if image_bytes[:4] == b'\x89PNG':
+            mime_type = "image/png"
+        elif image_bytes[:4] == b'RIFF':
+            mime_type = "image/webp"
+
+        client = get_client()
+        response = client.chat.completions.create(
+            model=GROQ_VISION_MODEL,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": VISION_PROMPT},
+                    {"type": "image_url", "image_url": {
+                        "url": f"data:{mime_type};base64,{b64}"
+                    }},
+                ],
+            }],
+            temperature=0.1,
+        )
+
+        raw_text = _strip_fences(response.choices[0].message.content)
         parsed = json.loads(raw_text)
 
         if isinstance(parsed, dict) and "error" in parsed:
             error_code = parsed["error"]
             state["pipeline_failed"] = True
             state["failure_reason"] = error_code
-            logger.info("agent1_image_error", extra={
-                "trace_id": trace_id, "error_code": error_code
-            })
+            logger.info("agent1_image_error", extra={"trace_id": trace_id, "error_code": error_code})
             return state
 
         state["raw_ingredients_json"] = parsed
@@ -103,6 +111,7 @@ async def _extract_from_image(state: PipelineState, start: float) -> PipelineSta
         logger.info("agent1_completed", extra={
             "trace_id": trace_id,
             "source": "vision",
+            "model": GROQ_VISION_MODEL,
             "ingredients_extracted": len(parsed),
             "duration_ms": round(duration_ms),
         })
@@ -127,12 +136,16 @@ async def _extract_from_image(state: PipelineState, start: float) -> PipelineSta
 async def _parse_from_text(state: PipelineState, start: float) -> PipelineState:
     trace_id = state.get("trace_id", "")
     try:
+        client = get_client()
         prompt = TEXT_PARSE_PROMPT.format(
             ingredients_text=state["ingredients_text_from_barcode"]
         )
-        model = get_text_model()
-        response = model.generate_content(prompt)
-        raw_text = _strip_fences(response.text)
+        response = client.chat.completions.create(
+            model=GROQ_TEXT_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+        )
+        raw_text = _strip_fences(response.choices[0].message.content)
         parsed = json.loads(raw_text)
 
         state["raw_ingredients_json"] = parsed

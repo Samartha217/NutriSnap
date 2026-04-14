@@ -84,7 +84,7 @@ def format_response(state: PipelineState) -> str:
             lines.append(f"• *{exp['ingredient']}:* {exp['explanation']}")
         lines.append("")
 
-    lines.append("_Data: Open Food Facts (EFSA) · USDA FoodData Central · Gemini AI_")
+    lines.append("_Data: Open Food Facts (EFSA) · USDA FoodData Central · Groq / Llama 4_")
     lines.append("_⚠️ Not medical advice._")
 
     return "\n".join(lines)

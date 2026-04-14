@@ -5,7 +5,8 @@ load_dotenv()
 
 # Required
 TELEGRAM_BOT_TOKEN: str = os.environ["TELEGRAM_BOT_TOKEN"]
-GEMINI_API_KEY: str = os.environ["GEMINI_API_KEY"]
+GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
+GROQ_API_KEY: str = os.environ["GROQ_API_KEY"]
 USDA_API_KEY: str = os.environ["USDA_API_KEY"]
 
 # Deployment
@@ -20,7 +21,9 @@ MAX_IMAGE_SIZE_MB: int = int(os.environ.get("MAX_IMAGE_SIZE_MB", 5))
 RATE_LIMIT_RPM: int = int(os.environ.get("RATE_LIMIT_REQUESTS_PER_MINUTE", 3))
 
 # Model
-GEMINI_MODEL: str = "gemini-2.5-flash-lite-preview-06-17"
+GEMINI_MODEL: str = "gemini-2.0-flash"  # kept for reference
+GROQ_VISION_MODEL: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+GROQ_TEXT_MODEL: str = "llama-3.3-70b-versatile"
 
 # External URLs
 USDA_API_BASE: str = "https://api.nal.usda.gov/fdc/v1"

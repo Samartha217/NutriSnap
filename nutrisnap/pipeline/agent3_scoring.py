@@ -10,7 +10,8 @@ import time
 from dataclasses import asdict
 
 from pipeline.state import PipelineState
-from utils.gemini_client import get_text_model
+from utils.gemini_client import get_client
+from config import GROQ_TEXT_MODEL
 from observability.logger import get_logger
 from observability.metrics import metrics
 
@@ -84,9 +85,13 @@ async def run_agent3(state: PipelineState) -> PipelineState:
     prompt = SCORING_PROMPT.format(ingredient_data=json.dumps(ingredient_data, indent=2))
 
     try:
-        model = get_text_model()
-        response = model.generate_content(prompt)
-        raw_text = response.text.strip()
+        client = get_client()
+        response = client.chat.completions.create(
+            model=GROQ_TEXT_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+        )
+        raw_text = response.choices[0].message.content.strip()
 
         # Strip markdown fences
         if raw_text.startswith("```"):

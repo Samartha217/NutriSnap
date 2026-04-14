@@ -1,35 +1,24 @@
 """
-Singleton Gemini client.
+Groq client — replaces Gemini for vision and text inference.
 
-Initialised once at startup. Both vision (Agent 1) and text (Agent 3)
-use the same model string — Gemini 2.5 Flash-Lite gives 1000 req/day free.
+Groq is free tier (1000 req/day), works in India, no billing required.
+Uses OpenAI-compatible API via the official groq Python SDK.
+
+Vision model : Llama 4 Scout (native multimodal)
+Text model   : Llama 3.3 70B Versatile
 """
-import google.generativeai as genai
-from config import GEMINI_API_KEY, GEMINI_MODEL
+from groq import Groq
+from config import GROQ_API_KEY
 from observability.logger import get_logger
 
 logger = get_logger(__name__)
 
-_vision_model = None
-_text_model = None
+_client = None
 
 
-def _init():
-    genai.configure(api_key=GEMINI_API_KEY)
-    logger.info("gemini_client_initialized", extra={"model": GEMINI_MODEL})
-
-
-def get_vision_model() -> genai.GenerativeModel:
-    global _vision_model
-    if _vision_model is None:
-        _init()
-        _vision_model = genai.GenerativeModel(GEMINI_MODEL)
-    return _vision_model
-
-
-def get_text_model() -> genai.GenerativeModel:
-    global _text_model
-    if _text_model is None:
-        _init()
-        _text_model = genai.GenerativeModel(GEMINI_MODEL)
-    return _text_model
+def get_client() -> Groq:
+    global _client
+    if _client is None:
+        _client = Groq(api_key=GROQ_API_KEY)
+        logger.info("groq_client_initialized")
+    return _client

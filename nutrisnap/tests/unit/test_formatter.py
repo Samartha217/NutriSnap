@@ -108,9 +108,9 @@ class TestFormatResponse:
         state["alternatives"] = ["A", "B", "C", "D", "E"]
         result = format_response(state)
         assert result.count("•") <= 15  # rough sanity check
-        # Only first 3 alternatives shown
-        assert "D" not in result
-        assert "E" not in result
+        # Only first 3 alternatives shown — check by bullet count in alternatives section
+        assert "• D\n" not in result
+        assert "• E\n" not in result
 
     def test_disclaimer_always_present(self):
         from bot.formatter import format_response
